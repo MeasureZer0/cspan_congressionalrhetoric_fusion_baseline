@@ -6,7 +6,7 @@ from pathlib import Path
 @dataclass
 class DatasetConfig:
     text_dir: str = "../dataset"
-    video_dir: str = "../dataset/raw_videos"
+    video_dir: str = "../Video/cspan_congressionalrhetoric_video/data/self-supervised"
     audio_dir: str = "../dataset/raw_audio"
     max_text_length: int = 256
     audio_sample_rate: int = 16000
@@ -28,7 +28,7 @@ class ModelConfig:
     freeze_audio: bool = False
 
     # video
-    video_checkpoint: str = "./checkpoints/video_model.pt"
+    video_checkpoint: str = "pretrained/video/dual_stream_best.pt"
     freeze_video: bool = False
     video_face_hidden: int = 128
     video_pose_hidden: int = 64

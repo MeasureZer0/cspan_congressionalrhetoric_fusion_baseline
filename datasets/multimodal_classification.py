@@ -43,35 +43,50 @@ class MultimodalClassificationDataset(Dataset):
         print(f"[{split}] Dataset initialized: {len(self.data)} valid samples")
 
     def _load_and_filter_data(self, skip_validation: bool) -> pd.DataFrame:
-        df = pd.read_json(os.path.join(self.text_dir, "text_data_all.json"), orient="index")
-
+        json_path = os.path.join(self.text_dir, "text_data_all.json")
+        df = pd.read_json(json_path, orient="index")
+        df = df.reset_index().rename(columns={"index": "filename"})
         split_map = {
             "train": "train.csv",
             "val": "val.csv",
             "test": "test.csv",
         }
-        if self.split not in split_map:
-            raise ValueError(f"split must be one of {list(split_map.keys())}, got {self.split}")
+        csv_path = os.path.join(self.text_dir, split_map[self.split])
+        split_df = pd.read_csv(csv_path)
+        if "label" in df.columns:
+            df = df.drop(columns=["label"])
+        df = pd.merge(df, split_df[["filename", "label"]], on="filename", how="inner")
 
-        split_ids = pd.read_csv(os.path.join(self.text_dir, split_map[self.split]))["filename"]
-        df = df[df.index.isin(split_ids)]
+        label_map = {
+            "negative": 0,
+            "neutral": 1,
+            "positive": 2
+        }
+    
+        if df["label"].dtype == object:
+            df["label"] = df["label"].str.lower().map(label_map)
+    
+        df = df.dropna(subset=["label", "transcription"])
+        
+        df["label"] = df["label"].astype(int)
         df = df[df["label"].notna() & df["transcription"].notna()]
-
+        df = df.set_index("filename")
+        print(df)
         if skip_validation:
             return df
 
         valid_indices = []
         missing_stats = {"video": 0, "audio": 0, "both": 0}
-
         for filename in df.index:
             video_id = filename.split(".")[0] if "." in filename else filename
-            video_path = os.path.join(self.video_dir, f"{video_id}_faces.pt")
+            video_path = os.path.join(self.video_dir, "self-supervised", f"{video_id}_faces.pt")
+            pose_path = os.path.join(self.video_dir, "pose-self-supervised", f"{video_id}_pose.pt")
             audio_path = os.path.join(self.audio_dir, f"{video_id}.wav")
 
             has_video = os.path.exists(video_path)
+            has_pose = os.path.exists(pose_path)
             has_audio = os.path.exists(audio_path)
-
-            if has_video and has_audio:
+            if has_video and has_audio and has_pose:
                 valid_indices.append(filename)
             else:
                 if not has_video and not has_audio:
