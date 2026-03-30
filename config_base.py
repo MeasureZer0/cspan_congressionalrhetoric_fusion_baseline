@@ -5,9 +5,9 @@ from pathlib import Path
 
 @dataclass
 class DatasetConfig:
-    text_dir: str = "./data/text"
-    video_dir: str = "./data/video"
-    audio_dir: str = "./data/audio"
+    text_dir: str = "../dataset"
+    video_dir: str = "../Video/cspan_congressionalrhetoric_video/data"
+    audio_dir: str = "../dataset/raw_audio"
     max_text_length: int = 256
     audio_sample_rate: int = 16000
     skip_validation: bool = False
@@ -18,7 +18,7 @@ class ModelConfig:
     num_classes: int = 3
 
     # text
-    bert_path: str = "./finetuned_bert_mlm"
+    bert_path: str = "pretrained/bert_mlm"
     text_dropout: float = 0.3
     freeze_text: bool = False
 
@@ -28,7 +28,7 @@ class ModelConfig:
     freeze_audio: bool = False
 
     # video
-    video_checkpoint: str = "./checkpoints/video_model.pt"
+    video_checkpoint: str = "pretrained/video/dual_stream_best.pt"
     freeze_video: bool = False
     video_face_hidden: int = 128
     video_pose_hidden: int = 64
