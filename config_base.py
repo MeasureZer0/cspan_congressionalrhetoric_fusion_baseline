@@ -5,7 +5,7 @@ from pathlib import Path
 
 @dataclass
 class DatasetConfig:
-    text_dir: str = "./data/text"
+    text_dir: str = "../dataset"
     video_dir: str = "./data/video"
     audio_dir: str = "./data/audio"
     max_text_length: int = 256
