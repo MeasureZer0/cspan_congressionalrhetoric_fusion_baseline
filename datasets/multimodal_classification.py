@@ -1,23 +1,24 @@
 import os
 import warnings
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pandas as pd
 import torch
-from torch.utils.data import Dataset
 import torchaudio
 import torchaudio.transforms as T
+from torch.utils.data import Dataset
 
 
 class MultimodalClassificationDataset(Dataset):
     """
     Supervised dataset for multimodal classification.
 
-    Expected files:
-      - text_dir/text_data_all.json
-      - text_dir/train.csv / val.csv / test.csv
-      - video_dir/{video_id}_faces.pt
-      - audio_dir/{video_id}.wav
+        Expected files:
+            - text_dir/text_data_all.json
+            - text_dir/train.csv / val.csv / test.csv
+            - video_dir/{video_id}_faces.pt
+            - video_dir/{video_id}_pose.pt
+            - audio_dir/{video_id}.wav
     """
 
     def __init__(
@@ -57,17 +58,13 @@ class MultimodalClassificationDataset(Dataset):
             df = df.drop(columns=["label"])
         df = pd.merge(df, split_df[["filename", "label"]], on="filename", how="inner")
 
-        label_map = {
-            "negative": 0,
-            "neutral": 1,
-            "positive": 2
-        }
-    
+        label_map = {"negative": 0, "neutral": 1, "positive": 2}
+
         if df["label"].dtype == object:
             df["label"] = df["label"].str.lower().map(label_map)
-    
+
         df = df.dropna(subset=["label", "transcription"])
-        
+
         df["label"] = df["label"].astype(int)
         df = df[df["label"].notna() & df["transcription"].notna()]
         df = df.set_index("filename")
@@ -79,8 +76,12 @@ class MultimodalClassificationDataset(Dataset):
         missing_stats = {"video": 0, "audio": 0, "both": 0}
         for filename in df.index:
             video_id = filename.split(".")[0] if "." in filename else filename
-            video_path = os.path.join(self.video_dir, "self-supervised", f"{video_id}_faces.pt")
-            pose_path = os.path.join(self.video_dir, "pose-self-supervised", f"{video_id}_pose.pt")
+            video_path = os.path.join(
+                self.video_dir, "self-supervised", f"{video_id}_faces.pt"
+            )
+            pose_path = os.path.join(
+                self.video_dir, "pose-self-supervised", f"{video_id}_pose.pt"
+            )
             audio_path = os.path.join(self.audio_dir, f"{video_id}.wav")
 
             has_video = os.path.exists(video_path)
@@ -113,7 +114,9 @@ class MultimodalClassificationDataset(Dataset):
     def _load_audio(self, audio_path: str) -> torch.Tensor:
         waveform, sample_rate = torchaudio.load(audio_path)
         if sample_rate != self.audio_sample_rate:
-            resampler = T.Resample(orig_freq=sample_rate, new_freq=self.audio_sample_rate)
+            resampler = T.Resample(
+                orig_freq=sample_rate, new_freq=self.audio_sample_rate
+            )
             waveform = resampler(waveform)
 
         if waveform.ndim == 1:
@@ -133,7 +136,22 @@ class MultimodalClassificationDataset(Dataset):
         video_path = os.path.join(self.video_dir, f"{video_id}_faces.pt")
         audio_path = os.path.join(self.audio_dir, f"{video_id}.wav")
 
-        video_item = torch.load(video_path, weights_only=False)
+        faces = torch.load(video_path, weights_only=False)
+        pose_path = os.path.join(self.video_dir, f"{video_id}_pose.pt")
+        if os.path.exists(pose_path):
+            pose = torch.load(pose_path, weights_only=False)
+        else:
+            pose = faces.new_zeros((faces.shape[0], 17, 3))
+
+        min_t = min(faces.shape[0], pose.shape[0])
+        faces = faces[:min_t]
+        pose = pose[:min_t]
+
+        video_item = {
+            "faces": faces,
+            "pose": pose,
+            "lengths": faces.shape[0],
+        }
         audio_waveform = self._load_audio(audio_path)
 
         transcript = row["transcription"]
