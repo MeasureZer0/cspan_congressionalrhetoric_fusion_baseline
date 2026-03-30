@@ -18,7 +18,7 @@ class ModelConfig:
     num_classes: int = 3
 
     # text
-    bert_path: str = "./finetuned_bert_mlm"
+    bert_path: str = "pretrained/bert_mlm"
     text_dropout: float = 0.3
     freeze_text: bool = False
 
