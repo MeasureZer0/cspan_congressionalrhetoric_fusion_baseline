@@ -1,6 +1,7 @@
-from pathlib import Path
 import json
 import random
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -108,7 +109,9 @@ def save_checkpoint(model, optimizer, epoch, metrics, save_dir, name="best.pt"):
         {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict() if optimizer is not None else None,
+            "optimizer_state_dict": optimizer.state_dict()
+            if optimizer is not None
+            else None,
             "metrics": metrics,
         },
         ckpt_path,
@@ -128,7 +131,10 @@ def train_model(model, train_loader, val_loader, cfg):
     )
     criterion = nn.CrossEntropyLoss()
 
-    save_dir = Path(cfg.train.save_dir)
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_name = getattr(cfg.train, "run_name", "").strip()
+    run_label = f"{run_name}_{run_id}" if run_name else run_id
+    save_dir = Path(cfg.train.save_dir) / run_label
     save_dir.mkdir(parents=True, exist_ok=True)
     cfg.save_json(save_dir / "config.json")
 

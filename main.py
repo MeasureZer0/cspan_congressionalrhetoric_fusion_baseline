@@ -21,10 +21,10 @@ def _add_video_repo_to_path() -> Path:
     candidates = [
         Path(env_path) if env_path else None,
         Path(__file__).resolve().parent.parent
-        / "Video" / "cspan_congressionalrhetoric_video",
+        / "Video"
+        / "cspan_congressionalrhetoric_video",
         Path(
-            "~/corporate/ccspan-congressional/Video/"
-            "cspan_congressionalrhetoric_video"
+            "~/corporate/ccspan-congressional/Video/cspan_congressionalrhetoric_video"
         ),
     ]
 
@@ -150,6 +150,7 @@ def main():
     args = parser.parse_args()
 
     cfg = load_config(args.config)
+    cfg.train.run_name = args.config.split(".")[-1]
 
     train_loader, val_loader = build_dataloaders(cfg)
     model = build_model(cfg)
