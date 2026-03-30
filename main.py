@@ -21,9 +21,9 @@ def _add_video_repo_to_path() -> Path:
     candidates = [
         Path(env_path) if env_path else None,
         Path(__file__).resolve().parent.parent
-        / "f2025_s2026_wl_cspan_congressionalrhetoric_video",
+        / "Video" / "cspan_congressionalrhetoric_video",
         Path(
-            "/home/x-jlewandowski/corporate/ccspan-congressional/Video/"
+            "~/corporate/ccspan-congressional/Video/"
             "cspan_congressionalrhetoric_video"
         ),
     ]
