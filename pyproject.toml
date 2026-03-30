@@ -1,0 +1,15 @@
+[project]
+name = "baseline"
+version = "0.1.0"
+description = "Baseline multimodal classification"
+readme = "README.md"
+requires-python = ">=3.12"
+package = false
+dependencies = [
+    "pandas>=3.0.1",
+    "torch>=2.10.0",
+    "torchaudio>=2.10.0",
+    "torchvision>=0.25.0",
+    "tqdm>=4.67.3",
+    "transformers>=5.3.0",
+]
