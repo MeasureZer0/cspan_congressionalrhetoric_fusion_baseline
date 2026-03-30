@@ -1,3 +1,10 @@
+import sys
+import argparse
+import importlib
+
+sys.path.insert(0, "/anvil/projects/x-cis220051/corporate/ccspan-congressional/fusion_baseline")
+sys.path.insert(1, "/anvil/projects/x-cis220051/corporate/ccspan-congressional/Video/cspan_congressionalrhetoric_video")
+
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer
 
@@ -7,11 +14,10 @@ from utils.collate import multimodal_collate_fn
 from models.text import BertTextClassifier
 from models.audio import AudioPlaceholderClassifier, Wav2Vec2Classifier
 from models.fusion import LateFusionModel, HiddenFusionModel
+from models.fuse import MultimodalFusionModel, CrossModalAttentionFusion
 from models.video_adapter import VideoClassifierAdapter
 from train import train_model
-
-from ../Video/cspan_congressionalrhetoric_video/training/models import DualStreamEncoder
-
+from training.models import DualStreamEncoder
 
 def build_dataloaders(cfg):
     tokenizer = BertTokenizer.from_pretrained(cfg.model.bert_path)
@@ -94,6 +100,8 @@ def build_model(cfg):
         freeze=cfg.model.freeze_video,
     )
 
+    fusion_model = CrossModalAttentionFusion()
+
     if cfg.model.fusion_type == "late":
         model = LateFusionModel(
             video_model=video_model,
@@ -111,6 +119,16 @@ def build_model(cfg):
             num_classes=cfg.model.num_classes,
             fusion_hidden=cfg.model.fusion_hidden_dim,
             dropout=cfg.model.fusion_dropout,
+        )
+    elif cfg.model.fusion_type == "attn":
+        model = MultimodalFusionModel(
+            video_encoder=video_model,
+            video_dim = 128,
+            text_encoder=text_model,
+            text_dim = text_model.config.hidden_size,
+            audio_encoder=audio_model,
+            audio_dim = audio_model.config.hidden_size,
+            fusion = fusion_model,
         )
     else:
         raise ValueError(f"Unsupported fusion_type: {cfg.model.fusion_type}")
