@@ -243,24 +243,10 @@ The model outputs:
 models/audio.py
 ```
 
-Two options:
-
 ### Wav2Vec2 Encoder
 
 ```
 Wav2Vec2Model
-```
-
-Used for real experiments.
-
-### Placeholder Encoder
-
-A lightweight CNN-based audio encoder used when Wav2Vec2 training is not ready.
-
-Enable with:
-
-```
-use_audio_placeholder = True
 ```
 
 ---
@@ -268,7 +254,7 @@ use_audio_placeholder = True
 ## Video Encoder Adapter
 
 ```
-models/video_adapter.py
+models/video.py
 ```
 
 Wraps the video model to ensure consistent interface:
@@ -289,21 +275,15 @@ num_classes
 
 ---
 
-## Fusion Models
+## Fusion Model
 
 ```
-models/fusion.py
+models/fuse.py
 ```
 
-Contains two fusion strategies.
+### CrossModalAttentionFusion
 
-### LateFusionModel
-
-Combines modality logits.
-
-### HiddenFusionModel
-
-Combines modality embeddings.
+Attention-based fusion over projected modality embeddings.
 
 ---
 
@@ -343,16 +323,10 @@ Run experiments by selecting a config file.
 
 Example:
 
-### Hidden Fusion Baseline
+### Attention Fusion Baseline
 
 ```
 python main.py --config configs.baseline_hidden
-```
-
-### Late Fusion Baseline
-
-```
-python main.py --config configs.baseline_late
 ```
 
 # Outputs

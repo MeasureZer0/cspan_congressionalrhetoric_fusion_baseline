@@ -9,8 +9,6 @@ class ModelConfig:
 
     # audio
     wav2vec_name: str = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
-    use_audio_placeholder: bool = False
-    audio_hidden_dim: int = 256
     audio_dropout: float = 0.3
     freeze_audio: bool = False
 
@@ -21,6 +19,4 @@ class ModelConfig:
     video_pose_hidden: int = 64
 
     # fusion
-    fusion_type: str = "hidden"
-    fusion_hidden_dim: int = 256
     fusion_dropout: float = 0.3

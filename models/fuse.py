@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 from torch import nn
 
@@ -100,10 +98,16 @@ class MultimodalFusionModel(nn.Module):
     def _text_embed(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor
     ) -> torch.Tensor:
-        return self.text_proj(self.text_encoder(input_ids, attention_mask))
+        return self.text_proj(
+            self.text_encoder.forward_hidden(input_ids, attention_mask)
+        )
 
-    def _audio_embed(self, audio_values: torch.Tensor) -> torch.Tensor:
-        return self.audio_proj(self.audio_encoder(audio_values))
+    def _audio_embed(
+        self, waveform: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        return self.audio_proj(
+            self.audio_encoder.forward_hidden(waveform, attention_mask)
+        )
 
     def forward(
         self,
@@ -112,12 +116,13 @@ class MultimodalFusionModel(nn.Module):
         lengths: torch.Tensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        audio_values: torch.Tensor,
+        waveform: torch.Tensor,
+        audio_attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         v_emb = self._video_embed(faces, pose, lengths)
         t_emb = self._text_embed(input_ids, attention_mask)
-        a_emb = self._audio_embed(audio_values)
-        return self.fusion([v_emb, t_emb, a_emb])
+        a_emb = self._audio_embed(waveform, audio_attention_mask)
+        return {"logits": self.fusion([v_emb, t_emb, a_emb])}
 
     def forward_hidden(
         self,
@@ -126,9 +131,10 @@ class MultimodalFusionModel(nn.Module):
         lengths: torch.Tensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        audio_values: torch.Tensor,
+        waveform: torch.Tensor,
+        audio_attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         v_emb = self._video_embed(faces, pose, lengths)
         t_emb = self._text_embed(input_ids, attention_mask)
-        a_emb = self._audio_embed(audio_values)
+        a_emb = self._audio_embed(waveform, audio_attention_mask)
         return self.fusion.forward_hidden([v_emb, t_emb, a_emb])
