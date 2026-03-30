@@ -59,13 +59,9 @@ class MultimodalClassificationDataset(Dataset):
         df = pd.merge(df, split_df[["filename", "label"]], on="filename", how="inner")
 
         label_map = {"negative": 0, "neutral": 1, "positive": 2}
-
-        if df["label"].dtype == object:
-            df["label"] = df["label"].str.lower().map(label_map)
+        df["label"] = df["label"].astype(str).str.strip().str.lower().map(label_map)
 
         df = df.dropna(subset=["label", "transcription"])
-
-        df["label"] = df["label"].astype(int)
         df = df[df["label"].notna() & df["transcription"].notna()]
         df = df.set_index("filename")
         print(df)
