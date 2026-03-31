@@ -64,7 +64,6 @@ class MultimodalClassificationDataset(Dataset):
         df = df.dropna(subset=["label", "transcription"])
         df = df[df["label"].notna() & df["transcription"].notna()]
         df = df.set_index("filename")
-        print(df)
         if skip_validation:
             return df
 
@@ -73,10 +72,10 @@ class MultimodalClassificationDataset(Dataset):
         for filename in df.index:
             video_id = filename.split(".")[0] if "." in filename else filename
             video_path = os.path.join(
-                self.video_dir, "self-supervised", f"{video_id}_faces.pt"
+                self.video_dir, f"{video_id}_faces.pt"
             )
             pose_path = os.path.join(
-                self.video_dir, "pose-self-supervised", f"{video_id}_pose.pt"
+                self.video_dir, f"{video_id}_pose.pt"
             )
             audio_path = os.path.join(self.audio_dir, f"{video_id}.wav")
 

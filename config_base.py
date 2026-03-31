@@ -6,7 +6,7 @@ from pathlib import Path
 @dataclass
 class DatasetConfig:
     text_dir: str = "../dataset"
-    video_dir: str = "../Video/cspan_congressionalrhetoric_video/data"
+    video_dir: str = "../Video/cspan_congressionalrhetoric_video/data/processed/frame_skip_30"
     audio_dir: str = "../dataset/raw_audio"
     max_text_length: int = 256
     audio_sample_rate: int = 16000
@@ -20,16 +20,16 @@ class ModelConfig:
     # text
     bert_path: str = "pretrained/bert_mlm"
     text_dropout: float = 0.3
-    freeze_text: bool = False
+    freeze_text: bool = True
 
     # audio
     wav2vec_name: str = "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
     audio_dropout: float = 0.3
-    freeze_audio: bool = False
+    freeze_audio: bool = True
 
     # video
     video_checkpoint: str = "pretrained/video/dual_stream_best.pt"
-    freeze_video: bool = False
+    freeze_video: bool = True
     video_face_hidden: int = 128
     video_pose_hidden: int = 64
 
@@ -40,12 +40,12 @@ class ModelConfig:
 @dataclass
 class TrainConfig:
     epochs: int = 10
-    batch_size: int = 4
+    batch_size: int = 1
     learning_rate: float = 2e-5
     weight_decay: float = 0.01
     save_dir: str = "./outputs"
     run_name: str = ""
-    num_workers: int = 4
+    num_workers: int = 0
     seed: int = 42
     device: str = "cuda"
     grad_clip: float = 1.0
