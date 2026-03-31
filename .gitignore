@@ -2,3 +2,6 @@ __pycache__/
 .ipynb_checkpoints/
 pretrained/
 outputs/
+slurm_out/
+logs/
+slurm-*
