@@ -1,7 +1,9 @@
 import torch
 
 
-def confusion_matrix_torch(preds: torch.Tensor, targets: torch.Tensor, num_classes: int) -> torch.Tensor:
+def confusion_matrix_torch(
+    preds: torch.Tensor, targets: torch.Tensor, num_classes: int
+) -> torch.Tensor:
     cm = torch.zeros((num_classes, num_classes), dtype=torch.long)
     for p, t in zip(preds.view(-1), targets.view(-1)):
         cm[t.long(), p.long()] += 1

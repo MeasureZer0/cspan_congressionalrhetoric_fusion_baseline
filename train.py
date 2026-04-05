@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.amp import GradScaler, autocast
 from torch.optim import AdamW
 from tqdm import tqdm
 
@@ -39,7 +40,9 @@ def move_batch_to_device(batch, device):
     }
 
 
-def run_epoch(model, dataloader, criterion, device, optimizer=None, grad_clip=1.0):
+def run_epoch(
+    model, dataloader, criterion, device, optimizer=None, grad_clip=1.0, scaler=None
+):
     is_train = optimizer is not None
     model.train() if is_train else model.eval()
 
@@ -55,24 +58,34 @@ def run_epoch(model, dataloader, criterion, device, optimizer=None, grad_clip=1.
         labels = batch["label"]
 
         with torch.set_grad_enabled(is_train):
-            outputs = model(
-                faces=batch["video"]["faces"],
-                pose=batch["video"]["pose"],
-                lengths=batch["video"]["lengths"],
-                input_ids=batch["text"]["input_ids"],
-                attention_mask=batch["text"]["attention_mask"],
-                waveform=batch["audio"]["waveform"],
-                audio_attention_mask=batch["audio"]["attention_mask"],
-            )
+            with autocast(
+                device_type=device.type,
+                dtype=torch.float16,
+                enabled=device.type == "cuda",
+            ):
+                outputs = model(
+                    faces=batch["video"]["faces"],
+                    pose=batch["video"]["pose"],
+                    lengths=batch["video"]["lengths"],
+                    input_ids=batch["text"]["input_ids"],
+                    attention_mask=batch["text"]["attention_mask"],
+                    waveform=batch["audio"]["waveform"],
+                    audio_attention_mask=batch["audio"]["attention_mask"],
+                )
+                logits = outputs["logits"]
+                loss = criterion(logits, labels)
 
-            logits = outputs["logits"]
-            loss = criterion(logits, labels)
-
-            if is_train:
-                optimizer.zero_grad()
+        if is_train:
+            optimizer.zero_grad()
+            if scaler is not None:
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
                 loss.backward()
-                if grad_clip is not None and grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
                 optimizer.step()
 
         preds = logits.argmax(dim=-1)
@@ -125,11 +138,47 @@ def train_model(model, train_loader, val_loader, cfg):
     model = model.to(device)
 
     optimizer = AdamW(
-        model.parameters(),
-        lr=cfg.train.learning_rate,
+        [
+            {
+                "params": [
+                    p for p in model.text_encoder.parameters() if p.requires_grad
+                ],
+                "lr": 2e-6,
+            },
+            {
+                "params": [
+                    p for p in model.audio_encoder.parameters() if p.requires_grad
+                ],
+                "lr": 2e-6,
+            },
+            {
+                "params": list(model.video_proj.parameters())
+                + list(model.text_proj.parameters())
+                + list(model.audio_proj.parameters()),
+                "lr": 2e-5,
+            },
+            {
+                "params": list(model.fusion.parameters()),
+                "lr": 2e-5,
+            },
+        ],
         weight_decay=cfg.train.weight_decay,
     )
-    criterion = nn.CrossEntropyLoss()
+
+    # class weights dla niezbalansowanych danych
+    all_labels = []
+    for batch in train_loader:
+        all_labels.append(batch["label"])
+    all_labels = torch.cat(all_labels, dim=0)
+    class_counts = torch.bincount(all_labels, minlength=cfg.model.num_classes).float()
+    class_weights = 1.0 / class_counts.clamp(min=1)
+    class_weights = class_weights / class_weights.sum() * cfg.model.num_classes
+    class_weights = class_weights.to(device)
+    print(f"Class counts: {class_counts.tolist()}")
+    print(f"Class weights: {class_weights.tolist()}")
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    scaler = GradScaler() if device.type == "cuda" else None
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = getattr(cfg.train, "run_name", "").strip()
@@ -151,6 +200,7 @@ def train_model(model, train_loader, val_loader, cfg):
             device=device,
             optimizer=optimizer,
             grad_clip=cfg.train.grad_clip,
+            scaler=scaler,
         )
 
         val_metrics = run_epoch(
@@ -159,6 +209,7 @@ def train_model(model, train_loader, val_loader, cfg):
             criterion=criterion,
             device=device,
             optimizer=None,
+            scaler=None,
         )
 
         record = {
@@ -178,6 +229,8 @@ def train_model(model, train_loader, val_loader, cfg):
         if val_metrics["f1_macro"] > best_val_f1:
             best_val_f1 = val_metrics["f1_macro"]
             save_checkpoint(model, optimizer, epoch, record, save_dir, name="best.pt")
+
+        save_checkpoint(model, optimizer, epoch, record, save_dir, name="last.pt")
 
         with open(save_dir / "history.json", "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)

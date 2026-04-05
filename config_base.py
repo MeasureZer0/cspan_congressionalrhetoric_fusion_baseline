@@ -6,7 +6,9 @@ from pathlib import Path
 @dataclass
 class DatasetConfig:
     text_dir: str = "../dataset"
-    video_dir: str = "../Video/cspan_congressionalrhetoric_video/data/processed/frame_skip_30"
+    video_dir: str = (
+        "../Video/cspan_congressionalrhetoric_video/data/processed/frame_skip_30"
+    )
     audio_dir: str = "../dataset/raw_audio"
     max_text_length: int = 256
     audio_sample_rate: int = 16000

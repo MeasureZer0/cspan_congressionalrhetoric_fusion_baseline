@@ -89,25 +89,28 @@ class MultimodalFusionModel(nn.Module):
 
         self.fusion = fusion
         self.common_dim = common_dim
+        self.num_classes = fusion.classifier[-1].out_features
 
     def _video_embed(
         self, faces: torch.Tensor, pose: torch.Tensor, lengths: torch.Tensor
     ) -> torch.Tensor:
-        return self.video_proj(self.video_encoder.forward_hidden(faces, pose, lengths))
+        with torch.no_grad():
+            h = self.video_encoder.forward_hidden(faces, pose, lengths)
+        return self.video_proj(h)
 
     def _text_embed(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor
     ) -> torch.Tensor:
-        return self.text_proj(
-            self.text_encoder.forward_hidden(input_ids, attention_mask)
-        )
+        with torch.no_grad():
+            h = self.text_encoder.forward_hidden(input_ids, attention_mask)
+        return self.text_proj(h)
 
     def _audio_embed(
         self, waveform: torch.Tensor, attention_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
-        return self.audio_proj(
-            self.audio_encoder.forward_hidden(waveform, attention_mask)
-        )
+        with torch.no_grad():
+            h = self.audio_encoder.forward_hidden(waveform, attention_mask)
+        return self.audio_proj(h)
 
     def forward(
         self,

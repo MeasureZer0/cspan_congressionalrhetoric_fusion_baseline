@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from transformers import BertTokenizer
 
 from datasets.multimodal_classification import MultimodalClassificationDataset
-from models.audio import Wav2Vec2Classifier
+from models.audio import ChunkedWav2VecAudioEncoder
 from models.fuse import CrossModalAttentionFusion, MultimodalFusionModel
 from models.text import BertTextClassifier
 from models.video import VideoClassifierAdapter
@@ -55,7 +55,6 @@ def build_dataloaders(cfg):
         audio_sample_rate=cfg.dataset.audio_sample_rate,
         skip_validation=cfg.dataset.skip_validation,
     )
-
     val_ds = MultimodalClassificationDataset(
         text_dir=cfg.dataset.text_dir,
         video_dir=cfg.dataset.video_dir,
@@ -96,11 +95,11 @@ def build_model(cfg):
         freeze=cfg.model.freeze_text,
     )
 
-    audio_model = Wav2Vec2Classifier(
+    audio_model = ChunkedWav2VecAudioEncoder(
         model_name=cfg.model.wav2vec_name,
         num_classes=cfg.model.num_classes,
         dropout=cfg.model.audio_dropout,
-        freeze=cfg.model.freeze_audio,
+        freeze_backbone=cfg.model.freeze_audio,
     )
 
     raw_video_model = DualStreamEncoder(
@@ -154,6 +153,21 @@ def main():
 
     train_loader, val_loader = build_dataloaders(cfg)
     model = build_model(cfg)
+
+    for p in model.text_encoder.parameters():
+        p.requires_grad = True
+
+    for p in model.audio_encoder.parameters():
+        p.requires_grad = True
+
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total params: {total:,}")
+    print(f"Trainable params: {trainable:,}")
+    print(f"Trainable %: {100 * trainable / total:.1f}%")
+    for name, module in model.named_children():
+        t = sum(p.numel() for p in module.parameters() if p.requires_grad)
+        print(f"  {name}: {t:,} trainable")
 
     train_model(model, train_loader, val_loader, cfg)
 
