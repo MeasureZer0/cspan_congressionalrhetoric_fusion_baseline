@@ -94,21 +94,31 @@ class MultimodalFusionModel(nn.Module):
     def _video_embed(
         self, faces: torch.Tensor, pose: torch.Tensor, lengths: torch.Tensor
     ) -> torch.Tensor:
-        with torch.no_grad():
+        # Respect requires_grad — only no_grad if truly frozen
+        if not any(p.requires_grad for p in self.video_encoder.parameters()):
+            with torch.no_grad():
+                h = self.video_encoder.forward_hidden(faces, pose, lengths)
+        else:
             h = self.video_encoder.forward_hidden(faces, pose, lengths)
         return self.video_proj(h)
 
     def _text_embed(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor
     ) -> torch.Tensor:
-        with torch.no_grad():
+        if not any(p.requires_grad for p in self.text_encoder.parameters()):
+            with torch.no_grad():
+                h = self.text_encoder.forward_hidden(input_ids, attention_mask)
+        else:
             h = self.text_encoder.forward_hidden(input_ids, attention_mask)
         return self.text_proj(h)
 
     def _audio_embed(
         self, waveform: torch.Tensor, attention_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
-        with torch.no_grad():
+        if not any(p.requires_grad for p in self.audio_encoder.parameters()):
+            with torch.no_grad():
+                h = self.audio_encoder.forward_hidden(waveform, attention_mask)
+        else:
             h = self.audio_encoder.forward_hidden(waveform, attention_mask)
         return self.audio_proj(h)
 

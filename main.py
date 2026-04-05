@@ -120,6 +120,13 @@ def build_model(cfg):
         dropout=cfg.model.fusion_dropout,
     )
 
+    # Unfreeze text and audio encoders BEFORE building the model,
+    # so the optimizer picks up the correct requires_grad state
+    for p in text_model.parameters():
+        p.requires_grad = True
+    for p in audio_model.parameters():
+        p.requires_grad = True
+
     model = MultimodalFusionModel(
         video_encoder=video_model,
         video_dim=video_model.output_dim,
@@ -145,6 +152,11 @@ def main():
         default="configs.baseline_hidden",
         help="config module path",
     )
+    parser.add_argument(
+        "--resume",
+        default=None,
+        help="path to last.pt checkpoint to resume from",
+    )
 
     args = parser.parse_args()
 
@@ -153,12 +165,6 @@ def main():
 
     train_loader, val_loader = build_dataloaders(cfg)
     model = build_model(cfg)
-
-    for p in model.text_encoder.parameters():
-        p.requires_grad = True
-
-    for p in model.audio_encoder.parameters():
-        p.requires_grad = True
 
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -169,7 +175,7 @@ def main():
         t = sum(p.numel() for p in module.parameters() if p.requires_grad)
         print(f"  {name}: {t:,} trainable")
 
-    train_model(model, train_loader, val_loader, cfg)
+    train_model(model, train_loader, val_loader, cfg, resume_from=args.resume)
 
 
 if __name__ == "__main__":

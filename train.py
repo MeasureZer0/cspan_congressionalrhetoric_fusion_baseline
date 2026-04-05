@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from torch.amp import GradScaler, autocast
 from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 
 from utils.metrics import confusion_matrix_torch, macro_f1_from_confusion_matrix
@@ -113,7 +114,9 @@ def run_epoch(
     }
 
 
-def save_checkpoint(model, optimizer, epoch, metrics, save_dir, name="best.pt"):
+def save_checkpoint(
+    model, optimizer, scheduler, epoch, metrics, save_dir, name="best.pt"
+):
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -125,13 +128,26 @@ def save_checkpoint(model, optimizer, epoch, metrics, save_dir, name="best.pt"):
             "optimizer_state_dict": optimizer.state_dict()
             if optimizer is not None
             else None,
+            "scheduler_state_dict": scheduler.state_dict()
+            if scheduler is not None
+            else None,
             "metrics": metrics,
         },
         ckpt_path,
     )
 
 
-def train_model(model, train_loader, val_loader, cfg):
+def load_checkpoint(path, model, optimizer=None, scheduler=None):
+    ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    model.load_state_dict(ckpt["model_state_dict"])
+    if optimizer is not None and ckpt.get("optimizer_state_dict") is not None:
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+    if scheduler is not None and ckpt.get("scheduler_state_dict") is not None:
+        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+    return ckpt.get("epoch", 0)
+
+
+def train_model(model, train_loader, val_loader, cfg, resume_from: str | None = None):
     set_seed(cfg.train.seed)
 
     device = torch.device(cfg.train.device if torch.cuda.is_available() else "cpu")
@@ -165,7 +181,13 @@ def train_model(model, train_loader, val_loader, cfg):
         weight_decay=cfg.train.weight_decay,
     )
 
-    # class weights dla niezbalansowanych danych
+    scheduler = CosineAnnealingLR(
+        optimizer,
+        T_max=cfg.train.epochs,
+        eta_min=1e-7,
+    )
+
+    # Class weights for imbalanced data
     all_labels = []
     for batch in train_loader:
         all_labels.append(batch["label"])
@@ -177,8 +199,13 @@ def train_model(model, train_loader, val_loader, cfg):
     print(f"Class counts: {class_counts.tolist()}")
     print(f"Class weights: {class_weights.tolist()}")
 
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    # Label smoothing reduces overconfidence on majority class
+    criterion = nn.CrossEntropyLoss(weight=class_weights, label_smoothing=0.1)
+
     scaler = GradScaler() if device.type == "cuda" else None
+
+    start_epoch = 0
+    history = []
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_name = getattr(cfg.train, "run_name", "").strip()
@@ -187,11 +214,24 @@ def train_model(model, train_loader, val_loader, cfg):
     save_dir.mkdir(parents=True, exist_ok=True)
     cfg.save_json(save_dir / "config.json")
 
-    history = []
-    best_val_f1 = -1.0
+    if resume_from is not None:
+        print(f"Resuming from checkpoint: {resume_from}")
+        start_epoch = load_checkpoint(resume_from, model, optimizer, scheduler)
+        history_path = Path(resume_from).parent / "history.json"
+        if history_path.exists():
+            with open(history_path) as f:
+                history = json.load(f)
+        print(f"Resuming from epoch {start_epoch + 1}")
 
-    for epoch in range(1, cfg.train.epochs + 1):
+    best_val_f1 = max((r["val_f1_macro"] for r in history), default=-1.0)
+
+    # Early stopping state
+    patience = getattr(cfg.train, "patience", 5)
+    epochs_no_improve = 0
+
+    for epoch in range(start_epoch + 1, cfg.train.epochs + 1):
         print(f"\n===== Epoch {epoch}/{cfg.train.epochs} =====")
+        print(f"  LR (fusion): {scheduler.get_last_lr()}")
 
         train_metrics = run_epoch(
             model=model,
@@ -212,6 +252,8 @@ def train_model(model, train_loader, val_loader, cfg):
             scaler=None,
         )
 
+        scheduler.step()
+
         record = {
             "epoch": epoch,
             "train_loss": train_metrics["loss"],
@@ -221,18 +263,35 @@ def train_model(model, train_loader, val_loader, cfg):
             "val_acc": val_metrics["acc"],
             "val_f1_macro": val_metrics["f1_macro"],
             "val_confusion_matrix": val_metrics["confusion_matrix"].tolist(),
+            "lr": scheduler.get_last_lr(),
         }
         history.append(record)
 
         print(json.dumps(record, indent=2))
 
-        if val_metrics["f1_macro"] > best_val_f1:
+        improved = val_metrics["f1_macro"] > best_val_f1
+        if improved:
             best_val_f1 = val_metrics["f1_macro"]
-            save_checkpoint(model, optimizer, epoch, record, save_dir, name="best.pt")
+            epochs_no_improve = 0
+            save_checkpoint(
+                model, optimizer, scheduler, epoch, record, save_dir, name="best.pt"
+            )
+            print(f"  ✓ New best val F1: {best_val_f1:.4f}")
+        else:
+            epochs_no_improve += 1
+            print(f"  No improvement for {epochs_no_improve}/{patience} epochs")
 
-        save_checkpoint(model, optimizer, epoch, record, save_dir, name="last.pt")
+        save_checkpoint(
+            model, optimizer, scheduler, epoch, record, save_dir, name="last.pt"
+        )
 
         with open(save_dir / "history.json", "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2)
+
+        if epochs_no_improve >= patience:
+            print(
+                f"\nEarly stopping at epoch {epoch} (no improvement for {patience} epochs)"
+            )
+            break
 
     return model, history
