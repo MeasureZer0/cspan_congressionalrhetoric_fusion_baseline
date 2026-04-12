@@ -1,6 +1,7 @@
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Optional
 
 
 @dataclass
@@ -51,6 +52,8 @@ class TrainConfig:
     seed: int = 42
     device: str = "cuda"
     grad_clip: float = 1.0
+    # Early-stopping patience
+    patience: int = 5
 
 
 @dataclass
