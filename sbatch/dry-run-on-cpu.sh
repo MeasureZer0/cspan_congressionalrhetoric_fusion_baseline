@@ -2,10 +2,9 @@
 #SBATCH -N 1               # Number of nodes. ALWAYS set to 1
 #SBATCH -n 1               # Number of tasks. ALWAYS set to 1
 #SBATCH -c 64              # Number of CPU cores. Can go as high as 128. Each additional CPU core adds around 1.9GB of RAM so to get more memory, add more CPU cores.
-#SBATCH -t 20:0:0           # Number of hours to run (H:M:S). Change as needed.
-#SBATCH -A cis220051-gpu   # The TDM account to charge for this. Don't change.
-#SBATCH -p gpu             # Partition to use -> gpu | gpu-debug if less than 15 minutes
-#SBATCH --gpus-per-node=1  # Must be just one GPU.
+#SBATCH -t 3:0:0           # Number of hours to run (H:M:S). Change as needed.
+#SBATCH -A cis220051       # The TDM account to charge for this. Don't change.
+#SBATCH -p shared          # Partition to use.
 
 # These three lines "load" the TDM python.  Almost always keep them.
 module use /anvil/projects/tdm/opt/core
@@ -14,14 +13,17 @@ module load python/seminar r/seminar
 module load ffmpeg/4.2.2
 
 cd $SLURM_SUBMIT_DIR
+uv sync
 source .venv/bin/activate
 
 # -u to disable stdout buffering
 python3 -u main.py \
-    --config configs.baseline_hidden
+    --config configs.baseline_hidden \
+    >logs/dry_run_${SLURM_JOBID}.log \
+    2>logs/dry_run_${SLURM_JOBID}.err
 
 # Make sure you run sbatch from the root of the project!
 # sbatch commands:
-# sbatch preprocessing.sh
+# sbatch dry-run-on-cpu.sh
 # squeue --me
 # scancel <jobid>

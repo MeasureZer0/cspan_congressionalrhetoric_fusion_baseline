@@ -62,21 +62,19 @@ class MultimodalClassificationDataset(Dataset):
         df["label"] = df["label"].astype(str).str.strip().str.lower().map(label_map)
 
         df = df.dropna(subset=["label", "transcription"])
-        df = df[df["label"].notna() & df["transcription"].notna()]
         df = df.set_index("filename")
-        print(df)
         if skip_validation:
             return df
 
         valid_indices = []
-        missing_stats = {"video": 0, "audio": 0, "both": 0}
+        missing_stats = {"video": 0, "pose": 0, "audio": 0, "multiple": 0}
         for filename in df.index:
             video_id = filename.split(".")[0] if "." in filename else filename
             video_path = os.path.join(
-                self.video_dir, "self-supervised", f"{video_id}_faces.pt"
+                self.video_dir, f"{video_id}_faces.pt"
             )
             pose_path = os.path.join(
-                self.video_dir, "pose-self-supervised", f"{video_id}_pose.pt"
+                self.video_dir, f"{video_id}_pose.pt"
             )
             audio_path = os.path.join(self.audio_dir, f"{video_id}.wav")
 
@@ -86,10 +84,13 @@ class MultimodalClassificationDataset(Dataset):
             if has_video and has_audio and has_pose:
                 valid_indices.append(filename)
             else:
-                if not has_video and not has_audio:
-                    missing_stats["both"] += 1
+                missing_count = sum([not has_video, not has_pose, not has_audio])
+                if missing_count > 1:
+                    missing_stats["multiple"] += 1
                 elif not has_video:
                     missing_stats["video"] += 1
+                elif not has_pose:
+                    missing_stats["pose"] += 1
                 else:
                     missing_stats["audio"] += 1
 
@@ -97,9 +98,10 @@ class MultimodalClassificationDataset(Dataset):
         if total_missing > 0:
             warnings.warn(
                 f"Filtered out {total_missing}/{len(df)} samples:\n"
-                f"  - Missing video only: {missing_stats['video']}\n"
-                f"  - Missing audio only: {missing_stats['audio']}\n"
-                f"  - Missing both: {missing_stats['both']}"
+                f"  - Missing faces only:  {missing_stats['video']}\n"
+                f"  - Missing pose only:   {missing_stats['pose']}\n"
+                f"  - Missing audio only:  {missing_stats['audio']}\n"
+                f"  - Missing multiple:    {missing_stats['multiple']}"
             )
 
         return df.loc[valid_indices]
@@ -168,11 +170,14 @@ class MultimodalClassificationDataset(Dataset):
             text_data["attention_mask"] = encoding["attention_mask"].squeeze(0)
 
         label = int(row["label"])
+        chunks = row.get("timestamped_chunks", [])
+        if not isinstance(chunks, list):
+            chunks = []
 
         return {
             "text": text_data,
             "video": video_item,
             "audio": audio_waveform,
             "label": torch.tensor(label, dtype=torch.long),
-            "meta": {"chunks": row.get("timestamped_chunks", [])},
+            "meta": {"chunks": chunks},
         }

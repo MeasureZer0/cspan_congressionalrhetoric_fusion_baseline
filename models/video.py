@@ -3,7 +3,6 @@ import torch.nn as nn
 
 
 class VideoClassifierAdapter(nn.Module):
-
     def __init__(self, video_model: nn.Module, checkpoint_path=None, freeze=False):
         super().__init__()
 
@@ -12,7 +11,9 @@ class VideoClassifierAdapter(nn.Module):
         if checkpoint_path is not None:
             print(f"Loading pretrained video model from {checkpoint_path}")
 
-            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+            checkpoint = torch.load(
+                checkpoint_path, map_location="cpu", weights_only=False
+            )
 
             # handle either raw state_dict or training checkpoint
             if "model_state_dict" in checkpoint:

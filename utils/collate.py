@@ -1,8 +1,12 @@
 from typing import Any, Dict, List, Tuple
 import torch
 
+MAX_AUDIO_SAMPLES = 16_000 * 30
 
-def _standardize_video_item(video_item: Any) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+
+def _standardize_video_item(
+    video_item: Any,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Expected per-sample formats:
       1) dict with keys: faces, pose, lengths
@@ -34,7 +38,9 @@ def _standardize_video_item(video_item: Any) -> Tuple[torch.Tensor, torch.Tensor
     return faces, pose, lengths
 
 
-def _pad_sequence_tensors(seq_list: List[torch.Tensor], pad_value: float = 0.0) -> torch.Tensor:
+def _pad_sequence_tensors(
+    seq_list: List[torch.Tensor], pad_value: float = 0.0
+) -> torch.Tensor:
     """
     Pad list of [T, ...] tensors to [B, T_max, ...].
     """
@@ -52,14 +58,18 @@ def multimodal_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     # text
     input_ids = torch.stack([item["text"]["input_ids"] for item in batch], dim=0)
-    attention_mask = torch.stack([item["text"]["attention_mask"] for item in batch], dim=0)
+    attention_mask = torch.stack(
+        [item["text"]["attention_mask"] for item in batch], dim=0
+    )
 
     # audio: each sample is [1, T]
-    audio_list = [item["audio"].squeeze(0) for item in batch]
+    audio_list = [item["audio"].squeeze(0)[:MAX_AUDIO_SAMPLES] for item in batch]
     audio_lengths = torch.tensor([x.shape[-1] for x in audio_list], dtype=torch.long)
     max_audio_len = int(audio_lengths.max().item())
     padded_audio = audio_list[0].new_zeros((len(audio_list), max_audio_len))
-    audio_attention_mask = torch.zeros((len(audio_list), max_audio_len), dtype=torch.long)
+    audio_attention_mask = torch.zeros(
+        (len(audio_list), max_audio_len), dtype=torch.long
+    )
 
     for i, x in enumerate(audio_list):
         L = x.shape[-1]
@@ -84,7 +94,7 @@ def multimodal_collate_fn(batch: List[Dict[str, Any]]) -> Dict[str, Any]:
             "attention_mask": attention_mask,
         },
         "audio": {
-            "waveform": padded_audio,                # [B, T]
+            "waveform": padded_audio,  # [B, T]
             "attention_mask": audio_attention_mask,  # [B, T]
             "lengths": audio_lengths,
         },
